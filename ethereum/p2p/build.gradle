@@ -36,6 +36,7 @@ dependencies {
   implementation project(':metrics:core')
   implementation project(':nat')
 
+  implementation 'com.google.code.gson:gson:2.8.9'
   implementation 'com.google.guava:guava'
   implementation 'dnsjava:dnsjava'
   implementation 'io.prometheus:simpleclient'

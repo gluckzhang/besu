@@ -110,6 +110,7 @@ public class NetworkRunner implements AutoCloseable {
     for (final ProtocolManager protocolManager : protocolManagers) {
       for (final Capability supportedCapability : protocolManager.getSupportedCapabilities()) {
         final SubProtocol protocol = subProtocols.get(supportedCapability.getName());
+        // TODO: Design SubnodeNetwork's subscribe method based on the following code
         network.subscribe(
             supportedCapability,
             (cap, message) -> {

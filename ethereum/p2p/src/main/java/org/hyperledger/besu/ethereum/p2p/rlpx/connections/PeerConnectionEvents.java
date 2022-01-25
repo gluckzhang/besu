@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class PeerConnectionEvents implements PeerConnectionEventDispatcher {
+//  private static final Logger LOG = LogManager.getLogger();
   private final Subscribers<DisconnectCallback> disconnectSubscribers = Subscribers.create(true);
   private final Map<Capability, Subscribers<MessageCallback>> messageSubscribers =
       new ConcurrentHashMap<>();
@@ -59,6 +60,7 @@ public class PeerConnectionEvents implements PeerConnectionEventDispatcher {
   public void dispatchMessage(
       final Capability capability, final PeerConnection connection, final MessageData message) {
     final Message msg = new DefaultMessage(connection, message);
+    // LOG.info(msg.getData().getCode());
     messageSubscribers
         .getOrDefault(capability, Subscribers.none())
         .forEach(s -> s.onMessage(capability, msg));

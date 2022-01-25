@@ -69,6 +69,7 @@ import org.hyperledger.besu.ethereum.p2p.network.DefaultP2PNetwork;
 import org.hyperledger.besu.ethereum.p2p.network.NetworkRunner;
 import org.hyperledger.besu.ethereum.p2p.network.NetworkRunner.NetworkBuilder;
 import org.hyperledger.besu.ethereum.p2p.network.NoopP2PNetwork;
+import org.hyperledger.besu.ethereum.p2p.network.SubnodeNetwork;
 import org.hyperledger.besu.ethereum.p2p.network.P2PNetwork;
 import org.hyperledger.besu.ethereum.p2p.network.ProtocolManager;
 import org.hyperledger.besu.ethereum.p2p.peers.DefaultPeer;
@@ -145,6 +146,7 @@ public class RunnerBuilder {
   private boolean p2pEnabled = true;
   private Optional<TLSConfiguration> p2pTLSConfiguration = Optional.empty();
   private boolean discovery;
+  private boolean subNode;
   private String p2pAdvertisedHost;
   private String p2pListenInterface = NetworkUtility.INADDR_ANY;
   private int p2pListenPort;
@@ -206,6 +208,11 @@ public class RunnerBuilder {
 
   public RunnerBuilder discovery(final boolean discovery) {
     this.discovery = discovery;
+    return this;
+  }
+
+  public RunnerBuilder subNode(final boolean subNode) {
+    this.subNode = subNode;
     return this;
   }
 
@@ -448,7 +455,20 @@ public class RunnerBuilder {
     final boolean fallbackEnabled = natMethod == NatMethod.AUTO || natMethodFallbackEnabled;
     final NatService natService = new NatService(buildNatManager(natMethod), fallbackEnabled);
     final NetworkBuilder inactiveNetwork = caps -> new NoopP2PNetwork();
-    final NetworkBuilder activeNetwork =
+    final NetworkBuilder subnodeNetwork =
+        caps ->
+            SubnodeNetwork.builder()
+                .vertx(vertx)
+                .nodeKey(nodeKey)
+                .config(networkingConfiguration)
+                .peerPermissions(peerPermissions)
+                .metricsSystem(metricsSystem)
+                .supportedCapabilities(caps)
+                .storageProvider(storageProvider)
+                .forkIdSupplier(forkIdSupplier)
+                .build();
+
+    final NetworkBuilder defaultP2PNetwork =
         caps ->
             DefaultP2PNetwork.builder()
                 .vertx(vertx)
@@ -463,6 +483,8 @@ public class RunnerBuilder {
                 .forkIdSupplier(forkIdSupplier)
                 .p2pTLSConfiguration(p2pTLSConfiguration)
                 .build();
+
+    final NetworkBuilder activeNetwork = subNode ? subnodeNetwork : defaultP2PNetwork;
 
     final NetworkRunner networkRunner =
         NetworkRunner.builder()

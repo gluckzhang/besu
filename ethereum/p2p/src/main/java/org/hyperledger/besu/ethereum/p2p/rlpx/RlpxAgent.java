@@ -339,6 +339,9 @@ public class RlpxAgent {
             });
   }
 
+  /*
+   * Long: a new peer connection is handled by this method, we should have something similar in the RabbitMQ agent
+   */
   private void handleIncomingConnection(final PeerConnection peerConnection) {
     final Peer peer = peerConnection.getPeer();
     // Deny connection if our local node isn't ready
