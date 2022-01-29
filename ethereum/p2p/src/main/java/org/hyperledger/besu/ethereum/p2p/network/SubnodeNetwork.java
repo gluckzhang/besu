@@ -121,7 +121,11 @@ public class SubnodeNetwork implements P2PNetwork {
 
   @Override
   public void start() {
-
+    if (!started.compareAndSet(false, true)) {
+      LOG.warn("Attempted to start an already started " + getClass().getSimpleName());
+      return;
+    }
+    rabbitmqAgent.start();
   }
 
   @Override
@@ -237,7 +241,7 @@ public class SubnodeNetwork implements P2PNetwork {
       final MutableLocalNode localNode =
           MutableLocalNode.create(config.getRlpx().getClientId(), 5, supportedCapabilities);
       final PeerPrivileges peerPrivileges = new DefaultPeerPrivileges(maintainedPeers);
-      rabbitmqAgent = rabbitmqAgent == null ? createRabbitmqAgent() : rabbitmqAgent;
+      rabbitmqAgent = rabbitmqAgent == null ? createRabbitmqAgent(localNode, metricsSystem) : rabbitmqAgent;
 
       return new SubnodeNetwork(
           localNode,
@@ -260,8 +264,8 @@ public class SubnodeNetwork implements P2PNetwork {
       checkState(forkIdSupplier != null, "ForkIdSupplier must be set.");
     }
 
-    private RabbitmqAgent createRabbitmqAgent() {
-      return new RabbitmqAgent();
+    private RabbitmqAgent createRabbitmqAgent(LocalNode localNode, MetricsSystem metricsSystem) {
+      return new RabbitmqAgent(localNode, metricsSystem);
     }
 
     public Builder rabbitmqAgent(final RabbitmqAgent rabbitmqAgent) {
