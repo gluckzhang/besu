@@ -61,8 +61,6 @@ public class RabbitmqAgent {
             String peerName = new String(delivery.getBody(), "UTF-8");
             LOG.info("new peer connected: {}", peerName);
             connectedPeersCounter.inc();
-            PeerConnection connection = new SubnodePeerConnection(null, null, peerName);
-            connectSubscribers.forEach(c -> c.onConnect(connection));
 
             String exchangeNameForPeer = peerName + "-in";
             DeliverCallback callback = (c, d) -> {
