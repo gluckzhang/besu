@@ -7,9 +7,15 @@ import com.rabbitmq.client.DeliverCallback;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.hyperledger.besu.ethereum.p2p.peers.LocalNode;
+import org.hyperledger.besu.ethereum.p2p.rlpx.ConnectCallback;
+import org.hyperledger.besu.ethereum.p2p.rlpx.connections.AbstractPeerConnection;
+import org.hyperledger.besu.ethereum.p2p.rlpx.connections.PeerConnection;
+import org.hyperledger.besu.ethereum.p2p.rlpx.wire.Capability;
+import org.hyperledger.besu.ethereum.p2p.rlpx.wire.MessageData;
 import org.hyperledger.besu.metrics.BesuMetricCategory;
 import org.hyperledger.besu.plugin.services.MetricsSystem;
 import org.hyperledger.besu.plugin.services.metrics.Counter;
+import org.hyperledger.besu.util.Subscribers;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -18,6 +24,7 @@ public class RabbitmqAgent {
     private static final Logger LOG = LogManager.getLogger();
 
     private final LocalNode localNode;
+    private final Subscribers<ConnectCallback> connectSubscribers = Subscribers.create();
     private int connectionCount = 0;
 
     private final ConnectionFactory factory = new ConnectionFactory();
@@ -44,12 +51,18 @@ public class RabbitmqAgent {
         this.peerConnectionHandler = subscribePeerConnectionEvents();
     }
 
+    public void subscribeConnect(final ConnectCallback callback) {
+        connectSubscribers.subscribe(callback);
+    }
+
     private ExecutorService subscribePeerConnectionEvents() {
         String exchangeName = "add_peer";
         DeliverCallback deliverCallback = (consumerTag, delivery) -> {
             String peerName = new String(delivery.getBody(), "UTF-8");
             LOG.info("new peer connected: {}", peerName);
             connectedPeersCounter.inc();
+            PeerConnection connection = new SubnodePeerConnection(null, null, peerName);
+            connectSubscribers.forEach(c -> c.onConnect(connection));
 
             String exchangeNameForPeer = peerName + "-in";
             DeliverCallback callback = (c, d) -> {

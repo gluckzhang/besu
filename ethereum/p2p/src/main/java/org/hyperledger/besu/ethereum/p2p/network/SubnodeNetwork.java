@@ -170,8 +170,7 @@ public class SubnodeNetwork implements P2PNetwork {
   }
 
   @Override
-  public void subscribeConnect(final ConnectCallback callback) {
-  }
+  public void subscribeConnect(final ConnectCallback callback) { rabbitmqAgent.subscribeConnect(callback); }
 
   @Override
   public void subscribeDisconnect(final DisconnectCallback callback) {
