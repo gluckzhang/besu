@@ -1,33 +1,45 @@
 package org.hyperledger.besu.ethereum.p2p.subnode;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.DeliverCallback;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.tuweni.bytes.Bytes;
 import org.hyperledger.besu.ethereum.p2p.peers.LocalNode;
 import org.hyperledger.besu.ethereum.p2p.rlpx.ConnectCallback;
+import org.hyperledger.besu.ethereum.p2p.rlpx.MessageCallback;
 import org.hyperledger.besu.ethereum.p2p.rlpx.connections.AbstractPeerConnection;
 import org.hyperledger.besu.ethereum.p2p.rlpx.connections.PeerConnection;
-import org.hyperledger.besu.ethereum.p2p.rlpx.wire.Capability;
-import org.hyperledger.besu.ethereum.p2p.rlpx.wire.MessageData;
+import org.hyperledger.besu.ethereum.p2p.rlpx.wire.*;
 import org.hyperledger.besu.metrics.BesuMetricCategory;
 import org.hyperledger.besu.plugin.services.MetricsSystem;
 import org.hyperledger.besu.plugin.services.metrics.Counter;
 import org.hyperledger.besu.util.Subscribers;
 
+import java.io.IOException;
+import java.net.URISyntaxException;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeoutException;
 
 public class RabbitmqAgent {
     private static final Logger LOG = LogManager.getLogger();
 
     private final LocalNode localNode;
     private final Subscribers<ConnectCallback> connectSubscribers = Subscribers.create();
+    private final Map<Capability, Subscribers<MessageCallback>> messageSubscribers =
+            new ConcurrentHashMap<>();
     private int connectionCount = 0;
 
-    private final ConnectionFactory factory = new ConnectionFactory();
+    private static final ConnectionFactory factory = new ConnectionFactory();
     private ExecutorService peerConnectionHandler = null;
 
     private final Counter connectedPeersCounter;
@@ -51,8 +63,23 @@ public class RabbitmqAgent {
         this.peerConnectionHandler = subscribePeerConnectionEvents();
     }
 
+    public void subscribeMessage(final Capability capability, final MessageCallback callback) {
+        messageSubscribers
+            .computeIfAbsent(capability, key -> Subscribers.create(true))
+            .subscribe(callback);
+    }
+
     public void subscribeConnect(final ConnectCallback callback) {
         connectSubscribers.subscribe(callback);
+    }
+
+    public static void sendMessage(String exchangeName, String message) throws URISyntaxException, NoSuchAlgorithmException, KeyManagementException, IOException, TimeoutException {
+        factory.setUri("amqp://guest:guest@localhost:5672");
+        Connection conn = factory.newConnection();
+        Channel channel = conn.createChannel();
+        channel.exchangeDeclare(exchangeName, "fanout", true);
+
+        channel.basicPublish(exchangeName, "", null, message.getBytes("UTF-8"));
     }
 
     private ExecutorService subscribePeerConnectionEvents() {
@@ -61,12 +88,21 @@ public class RabbitmqAgent {
             String peerName = new String(delivery.getBody(), "UTF-8");
             LOG.info("new peer connected: {}", peerName);
             connectedPeersCounter.inc();
+            SubnodePeer peer = new SubnodePeer(peerName);
+            SubnodePeerConnection peerConnection = new SubnodePeerConnection(peer, null);
+            connectSubscribers.forEach(c -> c.onConnect(peerConnection));
 
             String exchangeNameForPeer = peerName + "-in";
             DeliverCallback callback = (c, d) -> {
                 String peerMessage = new String(d.getBody(), "UTF-8");
                 LOG.info("new message from peer {}: {}", peerName, peerMessage);
-                // TODO: handle the peer message here
+                JsonObject jsonMessage = new Gson().fromJson(peerMessage, JsonObject.class);
+                final RawMessage messageData = new RawMessage(jsonMessage.get("Code").getAsInt(), Bytes.of(jsonMessage.get("Payload").getAsString().getBytes()));
+                final Message msg = new DefaultMessage(peerConnection, messageData);
+                Capability capability = Capability.create("eth", 66);
+                messageSubscribers
+                    .getOrDefault(capability, Subscribers.none())
+                    .forEach(s -> s.onMessage(capability, msg));
             };
             RabbitmqHandler peerMessageHandler = new RabbitmqHandler(exchangeNameForPeer, callback);
             ExecutorService exec = Executors.newSingleThreadExecutor();
@@ -108,6 +144,4 @@ public class RabbitmqAgent {
             }
         }
     }
-
-    public static void main(String[] args) { }
 }

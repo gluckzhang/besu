@@ -167,6 +167,7 @@ public class SubnodeNetwork implements P2PNetwork {
 
   @Override
   public void subscribe(final Capability capability, final MessageCallback callback) {
+      rabbitmqAgent.subscribeMessage(capability, callback);
   }
 
   @Override
