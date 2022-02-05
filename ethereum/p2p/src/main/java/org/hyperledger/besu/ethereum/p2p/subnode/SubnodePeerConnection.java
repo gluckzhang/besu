@@ -10,49 +10,61 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.tuweni.bytes.Bytes;
 import org.hyperledger.besu.crypto.Hash;
+import org.hyperledger.besu.ethereum.p2p.config.RlpxConfiguration;
+import org.hyperledger.besu.ethereum.p2p.peers.LocalNode;
 import org.hyperledger.besu.ethereum.p2p.peers.Peer;
 import org.hyperledger.besu.ethereum.p2p.rlpx.connections.AbstractPeerConnection;
 import org.hyperledger.besu.ethereum.p2p.rlpx.connections.PeerConnection;
-import org.hyperledger.besu.ethereum.p2p.rlpx.wire.Capability;
-import org.hyperledger.besu.ethereum.p2p.rlpx.wire.MessageData;
-import org.hyperledger.besu.ethereum.p2p.rlpx.wire.PeerInfo;
-import org.hyperledger.besu.ethereum.p2p.rlpx.wire.RawMessage;
+import org.hyperledger.besu.ethereum.p2p.rlpx.wire.*;
 import org.hyperledger.besu.ethereum.p2p.rlpx.wire.messages.DisconnectMessage;
+import org.hyperledger.besu.plugin.services.metrics.Counter;
+import org.hyperledger.besu.plugin.services.metrics.LabelledMetric;
 
 import java.net.InetSocketAddress;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class SubnodePeerConnection implements PeerConnection {
+public class SubnodePeerConnection extends AbstractPeerConnection {
     private static final Logger LOG = LogManager.getLogger();
 
     static final AtomicInteger connectionId = new AtomicInteger(0);
     private final SubnodePeer peer;
     private final PeerInfo peerInfo;
     private final Set<Capability> agreedCapabilities;
+    private final CapabilityMultiplexer multiplexer;
     private final AtomicBoolean disconnected = new AtomicBoolean(false);
     private Optional<DisconnectMessage.DisconnectReason> disconnectReason = Optional.empty();
 
-    public SubnodePeerConnection(SubnodePeer peer, PeerInfo peerInfo) {
+    public SubnodePeerConnection(SubnodePeer peer, PeerInfo peerInfo, CapabilityMultiplexer multiplexer, LabelledMetric<Counter> outboundMessagesCounter) {
+        super(
+            peer,
+            peerInfo,
+            null, null, null,
+            multiplexer,
+            null,
+            outboundMessagesCounter);
         this.peer = peer;
         this.peerInfo = peerInfo;
+        this.multiplexer = multiplexer;
         // TODO: the capability info could be added into a queue message (e.g., add_peer queue message)
         this.agreedCapabilities = new HashSet<>();
         this.agreedCapabilities.add(Capability.create("eth", 66));
     }
 
     @Override
-    public void send(Capability capability, MessageData message) throws PeerNotConnected {
+    protected void doSendMessage(Capability capability, MessageData message) {
         String exchangeName = this.peer.getPeerName() + "-out";
+        message = this.multiplexer.multiplex(capability, message);
 
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
         Payload payload = new Payload(message.getCode(), message.getSize(), new String(message.getData().toArray()));
         try {
             RabbitmqAgent.sendMessage(exchangeName, gson.toJson(payload));
-            LOG.info("SubnodePeer successfully sended message {}, {}", new String(message.getData().toArray()), capability);
+            LOG.info("SubnodePeer successfully sent message (code {})", message.getCode());
         } catch (Exception e) {
             e.printStackTrace();
+            LOG.info("SubnodePeer FAILED to send message (code {})", message.getCode());
         }
     }
 
@@ -76,6 +88,16 @@ public class SubnodePeerConnection implements PeerConnection {
         if (disconnected.compareAndSet(false, true)) {
             // do nothing for now
         }
+    }
+
+    @Override
+    protected void closeConnectionImmediately() {
+
+    }
+
+    @Override
+    protected void closeConnection() {
+
     }
 
     @Override

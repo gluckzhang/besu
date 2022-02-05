@@ -20,6 +20,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.tuweni.bytes.Bytes;
 import org.apache.tuweni.discovery.DNSDaemon;
 import org.hyperledger.besu.crypto.NodeKey;
+import org.hyperledger.besu.ethereum.core.Util;
 import org.hyperledger.besu.ethereum.p2p.config.NetworkingConfiguration;
 import org.hyperledger.besu.ethereum.p2p.discovery.DiscoveryPeer;
 import org.hyperledger.besu.ethereum.p2p.peers.*;
@@ -31,6 +32,7 @@ import org.hyperledger.besu.ethereum.p2p.rlpx.MessageCallback;
 import org.hyperledger.besu.ethereum.p2p.rlpx.connections.PeerConnection;
 import org.hyperledger.besu.ethereum.p2p.rlpx.connections.netty.TLSConfiguration;
 import org.hyperledger.besu.ethereum.p2p.rlpx.wire.Capability;
+import org.hyperledger.besu.ethereum.p2p.rlpx.wire.SubProtocol;
 import org.hyperledger.besu.ethereum.p2p.subnode.RabbitmqAgent;
 import org.hyperledger.besu.ethereum.storage.StorageProvider;
 import org.hyperledger.besu.plugin.data.EnodeURL;
@@ -78,6 +80,7 @@ public class SubnodeNetwork implements P2PNetwork {
 
   private final AtomicReference<List<DiscoveryPeer>> dnsPeers = new AtomicReference<>();
   private DNSDaemon dnsDaemon;
+  private final List<SubProtocol> subProtocols;
 
   /**
    * Creates a peer networking service for production purposes.
@@ -102,7 +105,8 @@ public class SubnodeNetwork implements P2PNetwork {
       final NetworkingConfiguration config,
       final PeerPermissions peerPermissions,
       final MaintainedPeers maintainedPeers,
-      final PeerReputationManager reputationManager) {
+      final PeerReputationManager reputationManager,
+      final List<SubProtocol> subProtocols) {
     this.localNode = localNode;
     this.rabbitmqAgent = rabbitmqAgent;
     this.config = config;
@@ -110,6 +114,7 @@ public class SubnodeNetwork implements P2PNetwork {
 
     this.nodeId = nodeKey.getPublicKey().getEncodedBytes();
     this.peerPermissions = peerPermissions;
+    this.subProtocols = subProtocols;
 
     final int maxPeers = config.getRlpx().getMaxPeers();
     subscribeDisconnect(reputationManager);
@@ -121,11 +126,32 @@ public class SubnodeNetwork implements P2PNetwork {
 
   @Override
   public void start() {
+    setLocalNode("127.0.0.1", 33333, 33334);
     if (!started.compareAndSet(false, true)) {
       LOG.warn("Attempted to start an already started " + getClass().getSimpleName());
       return;
     }
     rabbitmqAgent.start();
+  }
+
+  private void setLocalNode(
+          final String address, final int listeningPort, final int discoveryPort) {
+    if (localNode.isReady()) {
+      // Already set
+      return;
+    }
+
+    final EnodeURL localEnode =
+        EnodeURLImpl.builder()
+            .nodeId(nodeId)
+            .ipAddress(address)
+            .listeningPort(listeningPort)
+            .discoveryPort(discoveryPort)
+            .build();
+
+    LOG.info("Enode URL {}", localEnode.toString());
+    LOG.info("Node address {}", Util.publicKeyToAddress(localEnode.getNodeId()));
+    localNode.setEnode(localEnode);
   }
 
   @Override
@@ -225,6 +251,7 @@ public class SubnodeNetwork implements P2PNetwork {
     private StorageProvider storageProvider;
     private Supplier<List<Bytes>> forkIdSupplier;
     private Optional<TLSConfiguration> p2pTLSConfiguration = Optional.empty();
+    private List<SubProtocol> subProtocols;
 
     public P2PNetwork build() {
       validate();
@@ -241,7 +268,7 @@ public class SubnodeNetwork implements P2PNetwork {
       final MutableLocalNode localNode =
           MutableLocalNode.create(config.getRlpx().getClientId(), 5, supportedCapabilities);
       final PeerPrivileges peerPrivileges = new DefaultPeerPrivileges(maintainedPeers);
-      rabbitmqAgent = rabbitmqAgent == null ? createRabbitmqAgent(localNode, metricsSystem) : rabbitmqAgent;
+      rabbitmqAgent = rabbitmqAgent == null ? createRabbitmqAgent(localNode, metricsSystem, subProtocols) : rabbitmqAgent;
 
       return new SubnodeNetwork(
           localNode,
@@ -250,7 +277,8 @@ public class SubnodeNetwork implements P2PNetwork {
           config,
           peerPermissions,
           maintainedPeers,
-          reputationManager);
+          reputationManager,
+          subProtocols);
     }
 
     private void validate() {
@@ -264,14 +292,8 @@ public class SubnodeNetwork implements P2PNetwork {
       checkState(forkIdSupplier != null, "ForkIdSupplier must be set.");
     }
 
-    private RabbitmqAgent createRabbitmqAgent(LocalNode localNode, MetricsSystem metricsSystem) {
-      return new RabbitmqAgent(localNode, metricsSystem);
-    }
-
-    public Builder rabbitmqAgent(final RabbitmqAgent rabbitmqAgent) {
-      checkNotNull(rabbitmqAgent);
-      this.rabbitmqAgent = rabbitmqAgent;
-      return this;
+    private RabbitmqAgent createRabbitmqAgent(LocalNode localNode, MetricsSystem metricsSystem, List<SubProtocol> subProtocols) {
+      return new RabbitmqAgent(localNode, metricsSystem, subProtocols);
     }
 
     public Builder vertx(final Vertx vertx) {
@@ -330,6 +352,12 @@ public class SubnodeNetwork implements P2PNetwork {
     public Builder forkIdSupplier(final Supplier<List<Bytes>> forkIdSupplier) {
       checkNotNull(forkIdSupplier);
       this.forkIdSupplier = forkIdSupplier;
+      return this;
+    }
+
+    public Builder subProtocols(final List<SubProtocol> subProtocols) {
+      checkNotNull(subProtocols);
+      this.subProtocols = subProtocols;
       return this;
     }
   }

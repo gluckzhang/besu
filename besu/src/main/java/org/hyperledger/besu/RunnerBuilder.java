@@ -466,6 +466,7 @@ public class RunnerBuilder {
                 .supportedCapabilities(caps)
                 .storageProvider(storageProvider)
                 .forkIdSupplier(forkIdSupplier)
+                .subProtocols(subProtocols)
                 .build();
 
     final NetworkBuilder defaultP2PNetwork =
