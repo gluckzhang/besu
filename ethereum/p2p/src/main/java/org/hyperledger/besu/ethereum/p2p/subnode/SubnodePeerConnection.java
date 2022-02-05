@@ -21,6 +21,7 @@ import org.hyperledger.besu.plugin.services.metrics.Counter;
 import org.hyperledger.besu.plugin.services.metrics.LabelledMetric;
 
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -58,7 +59,7 @@ public class SubnodePeerConnection extends AbstractPeerConnection {
         message = this.multiplexer.multiplex(capability, message);
 
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
-        Payload payload = new Payload(message.getCode(), message.getSize(), new String(message.getData().toArray()));
+        Payload payload = new Payload(message.getCode(), message.getSize(), message.getData().toBase64String());
         try {
             RabbitmqAgent.sendMessage(exchangeName, gson.toJson(payload));
             LOG.info("SubnodePeer successfully sent message (code {})", message.getCode());

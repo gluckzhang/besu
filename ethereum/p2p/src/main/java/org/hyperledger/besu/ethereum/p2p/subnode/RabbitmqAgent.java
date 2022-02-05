@@ -1,6 +1,6 @@
 package org.hyperledger.besu.ethereum.p2p.subnode;
 
-import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
@@ -8,7 +8,7 @@ import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.DeliverCallback;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.tuweni.bytes.Bytes;
+import org.apache.tuweni.io.Base64;
 import org.hyperledger.besu.ethereum.p2p.peers.LocalNode;
 import org.hyperledger.besu.ethereum.p2p.rlpx.ConnectCallback;
 import org.hyperledger.besu.ethereum.p2p.rlpx.MessageCallback;
@@ -23,7 +23,6 @@ import java.io.IOException;
 import java.net.URISyntaxException;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -121,9 +120,9 @@ public class RabbitmqAgent {
             DeliverCallback callback = (c, d) -> {
                 String peerMessage = new String(d.getBody(), "UTF-8");
                 LOG.info("new message from peer {}: {}", peerName, peerMessage);
-                JsonObject jsonMessage = new Gson().fromJson(peerMessage, JsonObject.class);
-                final RawMessage messageData = new RawMessage(jsonMessage.get("Code").getAsInt(), Bytes.of(jsonMessage.get("Payload").getAsString().getBytes()));
-                final Message msg = new DefaultMessage(peerConnection, messageData);
+                JsonObject jsonMessage = new GsonBuilder().disableHtmlEscaping().create().fromJson(peerMessage, JsonObject.class);
+                final RawMessage messageData = new RawMessage(jsonMessage.get("Code").getAsInt(), Base64.decode(jsonMessage.get("Payload").getAsString()));
+                final Message msg = new DefaultMessage(peerConnection, multiplexer.demultiplex(messageData).getMessage());
                 messageSubscribers
                     .getOrDefault(capEth66, Subscribers.none())
                     .forEach(s -> s.onMessage(capEth66, msg));
