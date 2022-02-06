@@ -12,7 +12,12 @@ import org.apache.tuweni.io.Base64;
 import org.hyperledger.besu.ethereum.p2p.peers.LocalNode;
 import org.hyperledger.besu.ethereum.p2p.rlpx.ConnectCallback;
 import org.hyperledger.besu.ethereum.p2p.rlpx.MessageCallback;
+import org.hyperledger.besu.ethereum.p2p.rlpx.connections.PeerConnection;
 import org.hyperledger.besu.ethereum.p2p.rlpx.wire.*;
+import org.hyperledger.besu.ethereum.p2p.rlpx.wire.messages.DisconnectMessage;
+import org.hyperledger.besu.ethereum.p2p.rlpx.wire.messages.PongMessage;
+import org.hyperledger.besu.ethereum.p2p.rlpx.wire.messages.WireMessageCodes;
+import org.hyperledger.besu.ethereum.rlp.RLPException;
 import org.hyperledger.besu.metrics.BesuMetricCategory;
 import org.hyperledger.besu.plugin.services.MetricsSystem;
 import org.hyperledger.besu.plugin.services.metrics.Counter;
@@ -121,8 +126,48 @@ public class RabbitmqAgent {
                 String peerMessage = new String(d.getBody(), "UTF-8");
                 LOG.info("new message from peer {}: {}", peerName, peerMessage);
                 JsonObject jsonMessage = new GsonBuilder().disableHtmlEscaping().create().fromJson(peerMessage, JsonObject.class);
-                final RawMessage messageData = new RawMessage(jsonMessage.get("Code").getAsInt(), Base64.decode(jsonMessage.get("Payload").getAsString()));
-                final Message msg = new DefaultMessage(peerConnection, multiplexer.demultiplex(messageData).getMessage());
+                final RawMessage rawMessageData = new RawMessage(jsonMessage.get("Code").getAsInt(), Base64.decode(jsonMessage.get("Payload").getAsString()));
+                final CapabilityMultiplexer.ProtocolMessage demultiplexed = multiplexer.demultiplex(rawMessageData);
+                final MessageData messageData = demultiplexed.getMessage();
+                final Message msg = new DefaultMessage(peerConnection, messageData);
+
+                // Handle Wire messages
+                if (demultiplexed.getCapability() == null) {
+                    switch (messageData.getCode()) {
+                        case WireMessageCodes.PING:
+                            LOG.info("SubnodePeer Received Wire PING");
+                            try {
+                                peerConnection.send(null, PongMessage.get());
+                            } catch (final PeerConnection.PeerNotConnected peerNotConnected) {
+                                // Nothing to do
+                            }
+                            break;
+                        case WireMessageCodes.PONG:
+                            LOG.debug("SubnodePeer Received Wire PONG");
+                            break;
+                        case WireMessageCodes.DISCONNECT:
+                            final DisconnectMessage disconnect = DisconnectMessage.readFrom(messageData);
+                            DisconnectMessage.DisconnectReason reason = DisconnectMessage.DisconnectReason.UNKNOWN;
+                            try {
+                                reason = disconnect.getReason();
+                                LOG.info(
+                                    "Received Wire DISCONNECT ({}) from peer: {}",
+                                    reason.name(),
+                                    peerConnection.getPeerInfo());
+                            } catch (final RLPException e) {
+                                LOG.info(
+                                    "Received Wire DISCONNECT with invalid RLP. Peer: {}", peerConnection.getPeerInfo());
+                            } catch (final Exception e) {
+                                LOG.error(
+                                    "Received Wire DISCONNECT, but unable to parse reason. Peer: {}",
+                                    peerConnection.getPeerInfo(),
+                                    e);
+                            }
+                            peerConnection.terminateConnection(reason, true);
+                    }
+                    return;
+                }
+                // Handle ETH messages
                 messageSubscribers
                     .getOrDefault(capEth66, Subscribers.none())
                     .forEach(s -> s.onMessage(capEth66, msg));
