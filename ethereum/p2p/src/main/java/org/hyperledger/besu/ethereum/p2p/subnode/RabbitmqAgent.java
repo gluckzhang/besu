@@ -8,6 +8,7 @@ import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.DeliverCallback;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.tuweni.bytes.Bytes;
 import org.apache.tuweni.io.Base64;
 import org.hyperledger.besu.ethereum.p2p.peers.LocalNode;
 import org.hyperledger.besu.ethereum.p2p.rlpx.ConnectCallback;
@@ -113,7 +114,7 @@ public class RabbitmqAgent {
                 0,
                 peer.getPeerName(),
                 Arrays.asList(capEth66),
-                0, null);
+                0, Bytes.of(peerName.getBytes()));
             CapabilityMultiplexer multiplexer = new CapabilityMultiplexer(
                 subProtocols,
                 localNode.getPeerInfo().getCapabilities(),
