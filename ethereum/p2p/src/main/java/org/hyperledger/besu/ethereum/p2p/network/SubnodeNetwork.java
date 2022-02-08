@@ -252,6 +252,7 @@ public class SubnodeNetwork implements P2PNetwork {
     private Supplier<List<Bytes>> forkIdSupplier;
     private Optional<TLSConfiguration> p2pTLSConfiguration = Optional.empty();
     private List<SubProtocol> subProtocols;
+    private String rabbitmqUri;
 
     public P2PNetwork build() {
       validate();
@@ -268,7 +269,7 @@ public class SubnodeNetwork implements P2PNetwork {
       final MutableLocalNode localNode =
           MutableLocalNode.create(config.getRlpx().getClientId(), 5, supportedCapabilities);
       final PeerPrivileges peerPrivileges = new DefaultPeerPrivileges(maintainedPeers);
-      rabbitmqAgent = rabbitmqAgent == null ? createRabbitmqAgent(localNode, metricsSystem, subProtocols) : rabbitmqAgent;
+      rabbitmqAgent = rabbitmqAgent == null ? createRabbitmqAgent(localNode, metricsSystem, subProtocols, rabbitmqUri) : rabbitmqAgent;
 
       return new SubnodeNetwork(
           localNode,
@@ -292,8 +293,9 @@ public class SubnodeNetwork implements P2PNetwork {
       checkState(forkIdSupplier != null, "ForkIdSupplier must be set.");
     }
 
-    private RabbitmqAgent createRabbitmqAgent(LocalNode localNode, MetricsSystem metricsSystem, List<SubProtocol> subProtocols) {
-      return new RabbitmqAgent(localNode, metricsSystem, subProtocols);
+    private RabbitmqAgent createRabbitmqAgent(LocalNode localNode, MetricsSystem metricsSystem,
+        List<SubProtocol> subProtocols, String rabbitmqUri) {
+      return new RabbitmqAgent(localNode, metricsSystem, subProtocols, rabbitmqUri);
     }
 
     public Builder vertx(final Vertx vertx) {
@@ -358,6 +360,12 @@ public class SubnodeNetwork implements P2PNetwork {
     public Builder subProtocols(final List<SubProtocol> subProtocols) {
       checkNotNull(subProtocols);
       this.subProtocols = subProtocols;
+      return this;
+    }
+
+    public Builder rabbitmqUri(final String rabbitmqUri) {
+      checkNotNull(rabbitmqUri);
+      this.rabbitmqUri = rabbitmqUri;
       return this;
     }
   }

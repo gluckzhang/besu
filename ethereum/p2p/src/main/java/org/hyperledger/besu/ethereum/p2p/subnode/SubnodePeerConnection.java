@@ -36,8 +36,11 @@ public class SubnodePeerConnection extends AbstractPeerConnection {
     private final CapabilityMultiplexer multiplexer;
     private final AtomicBoolean disconnected = new AtomicBoolean(false);
     private Optional<DisconnectMessage.DisconnectReason> disconnectReason = Optional.empty();
+    private final RabbitmqAgent rabbitmqAgent;
 
-    public SubnodePeerConnection(SubnodePeer peer, PeerInfo peerInfo, CapabilityMultiplexer multiplexer, LabelledMetric<Counter> outboundMessagesCounter) {
+    public SubnodePeerConnection(SubnodePeer peer, PeerInfo peerInfo,
+            CapabilityMultiplexer multiplexer, LabelledMetric<Counter> outboundMessagesCounter,
+            RabbitmqAgent rabbitmqAgent) {
         super(
             peer,
             peerInfo,
@@ -51,6 +54,7 @@ public class SubnodePeerConnection extends AbstractPeerConnection {
         // TODO: the capability info could be added into a queue message (e.g., add_peer queue message)
         this.agreedCapabilities = new HashSet<>();
         this.agreedCapabilities.add(Capability.create("eth", 66));
+        this.rabbitmqAgent = rabbitmqAgent;
     }
 
     @Override
@@ -61,7 +65,7 @@ public class SubnodePeerConnection extends AbstractPeerConnection {
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
         Payload payload = new Payload(message.getCode(), message.getSize(), message.getData().toBase64String());
         try {
-            RabbitmqAgent.sendMessage(exchangeName, gson.toJson(payload));
+            this.rabbitmqAgent.sendMessage(exchangeName, gson.toJson(payload));
             LOG.info("SubnodePeer successfully sent message (code {})", message.getCode());
         } catch (Exception e) {
             e.printStackTrace();

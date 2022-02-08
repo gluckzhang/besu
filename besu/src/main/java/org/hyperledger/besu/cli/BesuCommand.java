@@ -373,6 +373,12 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
           arity = "1")
   private final Boolean subNode = false;
 
+  @Option(
+          names = {"--rabbitmq-uri"},
+          description = "The RabbitMQ URI for n-version Ethereum sub-node mode (default: ${DEFAULT-VALUE})",
+          arity = "1")
+  private String rabbitmqUri = "amqp://guest:guest@my-rabbit:5672";
+
   // A list of bootstrap nodes can be passed
   // and a hardcoded list will be used otherwise by the Runner.
   // NOTE: we have no control over default value here.
@@ -1401,6 +1407,7 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
         p2pTLSConfiguration,
         peerDiscoveryEnabled,
         subNode,
+        rabbitmqUri,
         ethNetworkConfig,
         maxPeers,
         p2pHost,
@@ -2371,6 +2378,7 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
       final Optional<TLSConfiguration> p2pTLSConfiguration,
       final boolean peerDiscoveryEnabled,
       final boolean subNode,
+      final String rabbitmqUri,
       final EthNetworkConfig ethNetworkConfig,
       final int maxPeers,
       final String p2pAdvertisedHost,
@@ -2400,6 +2408,7 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
             .natMethodFallbackEnabled(unstableNatOptions.getNatMethodFallbackEnabled())
             .discovery(peerDiscoveryEnabled)
             .subNode(subNode)
+            .rabbitmqUri(rabbitmqUri)
             .ethNetworkConfig(ethNetworkConfig)
             .permissioningConfiguration(permissioningConfiguration)
             .p2pAdvertisedHost(p2pAdvertisedHost)

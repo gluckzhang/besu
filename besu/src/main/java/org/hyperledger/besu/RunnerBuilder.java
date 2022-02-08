@@ -147,6 +147,7 @@ public class RunnerBuilder {
   private Optional<TLSConfiguration> p2pTLSConfiguration = Optional.empty();
   private boolean discovery;
   private boolean subNode;
+  private String rabbitmqUri;
   private String p2pAdvertisedHost;
   private String p2pListenInterface = NetworkUtility.INADDR_ANY;
   private int p2pListenPort;
@@ -213,6 +214,11 @@ public class RunnerBuilder {
 
   public RunnerBuilder subNode(final boolean subNode) {
     this.subNode = subNode;
+    return this;
+  }
+
+  public RunnerBuilder rabbitmqUri(final String rabbitmqUri) {
+    this.rabbitmqUri = rabbitmqUri;
     return this;
   }
 
@@ -467,6 +473,7 @@ public class RunnerBuilder {
                 .storageProvider(storageProvider)
                 .forkIdSupplier(forkIdSupplier)
                 .subProtocols(subProtocols)
+                .rabbitmqUri(rabbitmqUri)
                 .build();
 
     final NetworkBuilder defaultP2PNetwork =

@@ -53,9 +53,12 @@ public class RabbitmqAgent {
     private final Counter connectedPeersCounter;
     private final LabelledMetric<Counter> outboundMessagesCounter;
 
-    public RabbitmqAgent(LocalNode localNode, MetricsSystem metricsSystem, List<SubProtocol> subProtocols) {
+    private final String rabbitmqUri;
+
+    public RabbitmqAgent(LocalNode localNode, MetricsSystem metricsSystem, List<SubProtocol> subProtocols, String rabbitmqUri) {
         this.localNode = localNode;
         this.subProtocols = subProtocols;
+        this.rabbitmqUri = rabbitmqUri;
 
         // Setup metrics
         this.connectedPeersCounter = metricsSystem.createCounter(
@@ -92,8 +95,9 @@ public class RabbitmqAgent {
         connectSubscribers.subscribe(callback);
     }
 
-    public static void sendMessage(String exchangeName, String message) throws URISyntaxException, NoSuchAlgorithmException, KeyManagementException, IOException, TimeoutException {
-        factory.setUri("amqp://guest:guest@localhost:5672");
+    public void sendMessage(String exchangeName, String message) throws URISyntaxException, NoSuchAlgorithmException, KeyManagementException, IOException, TimeoutException {
+        // TODO: use rabbitmqUri instead of the hardcoded uri
+        factory.setUri(this.rabbitmqUri);
         Connection conn = factory.newConnection();
         Channel channel = conn.createChannel();
         channel.exchangeDeclare(exchangeName, "fanout", true);
@@ -119,7 +123,7 @@ public class RabbitmqAgent {
                 subProtocols,
                 localNode.getPeerInfo().getCapabilities(),
                 peerInfo.getCapabilities());
-            SubnodePeerConnection peerConnection = new SubnodePeerConnection(peer, peerInfo, multiplexer, outboundMessagesCounter);
+            SubnodePeerConnection peerConnection = new SubnodePeerConnection(peer, peerInfo, multiplexer, outboundMessagesCounter, this);
             connectSubscribers.forEach(c -> c.onConnect(peerConnection));
 
             String exchangeNameForPeer = peerName + "-in";
@@ -199,7 +203,7 @@ public class RabbitmqAgent {
         @Override
         public void run() {
             try {
-                factory.setUri("amqp://guest:guest@localhost:5672");
+                factory.setUri(rabbitmqUri);
                 Connection conn = factory.newConnection();
                 Channel channel = conn.createChannel();
 
